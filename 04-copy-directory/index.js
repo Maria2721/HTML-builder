@@ -1,60 +1,41 @@
-const fs = require('fs');
+const { readdir, copyFile, mkdir, rm } = require('fs/promises');
 const path = require('path');
 
 const folderPath = path.join(__dirname, 'files');
+const folderPathWrite = path.join(__dirname, 'files-copy');
 
-function copyDir() {
-  const folderPathWrite = path.join(__dirname, 'files-copy');
-
-  // Delete the target directory if it exists
-  fs.rm(folderPathWrite, { recursive: true, force: true }, (rmErr) => {
-    if (rmErr) {
-      console.error(`Error deleting folder: ${rmErr.message}`);
-      return;
-    }
+async function copyDir(sourcePath, targetPath) {
+  try {
+    // Delete the target directory if it exists
+    await rm(targetPath, { recursive: true, force: true });
 
     // Create a target directory
-    fs.mkdir(folderPathWrite, { recursive: true }, (mkdirErr) => {
-      if (mkdirErr) {
-        console.error(`Error creating folder: ${mkdirErr.message}`);
-        return;
+    await mkdir(targetPath, { recursive: true });
+
+    // Reading the source directory
+    const files = await readdir(sourcePath, { withFileTypes: true });
+
+    // Copy the files or recursively copy subdirectories from the source directory
+    for (const file of files) {
+      const sourceFilePath = path.join(sourcePath, file.name);
+      const targetFilePath = path.join(targetPath, file.name);
+
+      if (file.isFile()) {
+        await copyFile(sourceFilePath, targetFilePath);
+      } else if (file.isDirectory()) {
+        await copyDir(sourceFilePath, targetFilePath);
       }
+    }
+  } catch (err) {
+    console.error(`Error while copying directory: ${err.message}`);
+  }
+}
 
-      // Reading the source directory
-      fs.readdir(folderPath, { withFileTypes: true }, (readErr, files) => {
-        if (readErr) {
-          console.error(`Error reading folder: ${readErr.message}`);
-          return;
-        }
-
-        // Copying files from source directory to target directory
-        files.forEach((file) => {
-          if (file.isFile()) {
-            const filePath = path.join(folderPath, file.name);
-            const filePathWrite = path.join(folderPathWrite, file.name);
-
-            fs.copyFile(filePath, filePathWrite, (copyErr) => {
-              if (copyErr) {
-                console.error(
-                  `Error copying file ${file.name}: ${copyErr.message}`,
-                );
-              } else {
-                console.log(`File ${file.name} copied successfully`);
-              }
-            });
-          }
-        });
-      });
-    });
+if (require.main === module) {
+  // Default copy operation
+  copyDir(folderPath, folderPathWrite).then(() => {
+    console.log('Directory copying completed successfully');
   });
 }
 
-// Tracking changes in the source directory
-fs.watch(folderPath, { recursive: false }, (eventType, filename) => {
-  if (filename) {
-    console.log(`Change detected: ${eventType} in file ${filename}`);
-    copyDir();
-  }
-});
-
-copyDir();
+module.exports = { copyDir };
